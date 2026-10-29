@@ -1,0 +1,13 @@
+Venta.iPhone.Buceo - tienda lista para subir
+
+Archivos:
+  index.html  la tienda completa (catalogo, carrito, pedidos por WhatsApp)
+  logo.png    icono de la pestana y vista previa al compartir el link
+
+Para publicarla en un hosting de paginas estaticas (Cloudflare Pages, Netlify, GitHub Pages):
+  1. Subi estos archivos a la raiz del repositorio o de la carpeta de publicacion.
+  2. No hace falta compilar ni instalar nada.
+  3. En el hosting, el directorio de publicacion es la raiz ("/" o vacio).
+
+Nota: el boton "Editar tienda" solo funciona dentro de Claude. En tu dominio, los cambios se hacen
+editando index.html (o pidiendole a Claude que genere la version nueva).
