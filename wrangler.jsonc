@@ -1,0 +1,18 @@
+{
+  // Configuración de la tienda en Cloudflare Workers
+  "name": "tienda",
+  "main": "src/worker.js",
+  "compatibility_date": "2025-10-01",
+  "assets": {
+    "directory": "./",
+    "binding": "ASSETS",
+    "run_worker_first": true
+  },
+  "kv_namespaces": [
+    {
+      "binding": "STORE",
+      "id": "82130625ee6243b3b3570d01c23db10c"
+    }
+  ],
+  "observability": { "enabled": true }
+}

@@ -1,0 +1,14 @@
+.git
+.github
+.gitignore
+.assetsignore
+.wrangler
+.dev.vars
+node_modules
+src
+wrangler.jsonc
+wrangler.toml
+package.json
+package-lock.json
+LEEME.txt
+README.md

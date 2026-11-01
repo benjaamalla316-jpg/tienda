@@ -3,6 +3,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="description" content="Venta.iPhone.Buceo: iPhone nuevos y usados en Buceo, Montevideo. Mirá el catálogo, compará precios y hacé tu pedido por WhatsApp.">
 <meta name="theme-color" content="#ffffff">
+<meta name="vib-api" content="/api">
 <meta property="og:title" content="Venta.iPhone.Buceo">
 <meta property="og:description" content="Tu próximo iPhone está acá. Catálogo y pedidos por WhatsApp.">
 <meta property="og:type" content="website">
@@ -417,7 +418,7 @@ main:focus { outline: none; }
 }
 .mobile-menu > a:not(.btn) { display: block; }
 .mobile-menu .mm-contact .btn { display: inline-flex; border-bottom: 0; padding: 0 22px; font-size: 16px; font-weight: 650; letter-spacing: .01em; width: 100%; }
-.toast { white-space: nowrap; }
+.toast { white-space: normal; width: max-content; max-width: calc(100vw - 32px); text-align: center; }
 .card-media .ph { padding: 8%; }
 .card-media img { padding: 7%; }
 [hidden] { display: none !important; }
@@ -571,6 +572,21 @@ body{background:#fff;color:#15171b}
   // ---------- datos publicados ----------
   let S;
   try { S = JSON.parse($('#store-data').textContent); } catch { S = { settings: {}, products: [], faqs: [], nextId: 1 }; }
+
+  // ---------- modo dominio propio (Cloudflare) ----------
+  // Si la página trae <meta name="vib-api">, los cambios se guardan en el servidor con contraseña.
+  const API = ($('meta[name="vib-api"]') || {}).content || '';
+  const TOKEN_KEY = 'vib_admin_token';
+  const getToken = () => { try { return localStorage.getItem(TOKEN_KEY) || ''; } catch { return ''; } };
+  const setToken = (t) => { try { if (t) localStorage.setItem(TOKEN_KEY, t); else localStorage.removeItem(TOKEN_KEY); } catch { /* sin almacenamiento */ } };
+  async function api(path, opts = {}) {
+    const headers = { ...(opts.headers || {}) }; const t = getToken(); if (t) headers.Authorization = 'Bearer ' + t;
+    let r;
+    try { r = await fetch(API + path, { ...opts, headers, cache: 'no-store' }); } catch { const e = new Error('Sin conexión. Revisá internet y probá de nuevo.'); e.status = 0; throw e; }
+    let j = null; try { j = await r.json(); } catch { /* respuesta vacía */ }
+    if (!r.ok) { const e = new Error((j && j.error) || `Error del servidor (${r.status}).`); e.status = r.status; throw e; }
+    return j;
+  }
   const cfg = () => S.settings;
   const digits = (s) => String(s || '').replace(/\D/g, '');
   const money = (n, cur) => { const s = nf.format(n); return cur === 'USD' ? `US$ ${s}` : cur === 'UYU' ? `$U ${s}` : s; };
@@ -989,12 +1005,25 @@ body{background:#fff;color:#15171b}
   function buildDoc(state) {
     const css = $('#app-css').textContent; const code = $('#app-code').textContent;
     const data = JSON.stringify(state).replace(/</g, '\\u003c');
-    return SKEL_HEAD + '<title>' + TITLE + '</title><style id="app-css">' + css + '</style><div id="root"></div>' +
+    return SKEL_HEAD + '<title>' + TITLE + '</title><meta name="claude:viewport-fit-sides" content="cover"><style id="app-css">' + css + '</style><div id="root"></div>' +
       '<script type="application/json" id="store-data">' + data + '</' + 'script><script id="app-code">' + code + '</' + 'script>' + SKEL_TAIL;
   }
   async function publish() {
     if (!caps.artifact || pubBusy) return;
     pubBusy = true; renderAdmin();
+    if (API) {
+      try {
+        const r = await api('/store', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(draft) });
+        S = clone(draft); S.updatedAt = r.updatedAt; draft = clone(S); dirty = false; pubBusy = false;
+        shell(); route(); toast('Publicado. La tienda ya muestra los cambios.');
+      } catch (e) {
+        pubBusy = false;
+        // Si la sesión venció, se pide la contraseña sin perder los cambios hechos.
+        if (e.status === 401) { setToken(''); disableServerEditor(); route(); toast('Tu sesión venció. Entrá de nuevo; tus cambios siguen acá.'); return; }
+        renderAdmin(); toast(e.message || 'No se pudo publicar. Probá de nuevo.');
+      }
+      return;
+    }
     try {
       await caps.artifact.publish(buildDoc(draft));
       toast('Publicado. La tienda ya muestra los cambios.');
@@ -1005,12 +1034,47 @@ body{background:#fff;color:#15171b}
     }
   }
 
+  function enableServerEditor() {
+    isEditor = true;
+    caps = {
+      artifact: { server: true },
+      assets: {
+        async upload(blob) { return api('/img', { method: 'POST', headers: { 'Content-Type': blob.type || 'image/webp' }, body: blob }); },
+      },
+    };
+    const fab = $('#edit-fab'); if (fab) fab.hidden = false;
+  }
+  function disableServerEditor() {
+    isEditor = false; caps = { artifact: null, assets: null };
+    const fab = $('#edit-fab'); if (fab) fab.hidden = true;
+  }
+  function pageLogin() {
+    setPage(html`<div class="wrap section"><div class="a-panel a-form" style="max-width:420px;margin:0 auto">
+      <h1 style="font-size:26px;margin:0">Editar tienda</h1><p class="a-help" style="margin:0">Entrá con tu contraseña de administrador para cargar productos y cambiar los ajustes.</p>
+      <form class="a-form" id="lg-f" novalidate><label class="lbl" for="lg-pw">Contraseña<input class="field" id="lg-pw" name="pw" type="password" autocomplete="current-password" required></label>
+        <div class="alert" id="lg-err" role="alert" hidden></div><button class="btn btn-block" type="submit" id="lg-btn">Entrar</button></form>
+      <a href="#inicio" class="a-help">Volver a la tienda</a></div></div>`, 'Editar tienda', '');
+    const f = $('#lg-f'); const pw = $('#lg-pw'); const err = $('#lg-err'); const b = $('#lg-btn');
+    setTimeout(() => pw.focus(), 30);
+    f.addEventListener('submit', async (e) => {
+      e.preventDefault(); err.hidden = true;
+      if (!pw.value) { err.textContent = 'Escribí la contraseña.'; err.hidden = false; return; }
+      b.disabled = true; b.textContent = 'Entrando…';
+      try {
+        const r = await api('/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: pw.value }) });
+        setToken(r.token); enableServerEditor(); route();
+      } catch (ex) {
+        err.textContent = ex.message || 'No se pudo entrar.'; err.hidden = false; b.disabled = false; b.textContent = 'Entrar'; pw.select();
+      }
+    });
+  }
   function pageAdmin() {
+    if (!isEditor && API) return pageLogin();
     if (!isEditor) {
       return setPage(html`<div class="wrap section">${emptyBox('Solo el dueño puede editar la tienda', 'Abrí esta página con la cuenta que la publicó para cargar productos y cambiar los ajustes.', html`<br><a class="btn" href="#inicio">Volver a la tienda</a>`)}</div>`, 'Editar tienda', '');
     }
     if (!draft) draft = clone(S);
-    setPage(html`<div class="wrap a-main"><div class="a-head"><h1>Editar tienda</h1></div><div id="admin-body"></div></div>`, 'Editar tienda', '');
+    setPage(html`<div class="wrap a-main"><div class="a-head" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><h1>Editar tienda</h1>${API ? html`<span style="display:flex;gap:8px"><a class="btn btn-soft btn-sm" style="background:var(--paper);border:1px solid var(--line)" href="#inicio">Ver tienda</a><button class="btn btn-soft btn-sm" style="background:var(--paper);border:1px solid var(--line)" type="button" id="a-logout">Cerrar sesión</button></span>` : ''}</div><div id="admin-body"></div></div>`, 'Editar tienda', '');
     renderAdmin();
   }
   function renderAdmin() {
@@ -1270,6 +1334,10 @@ body{background:#fff;color:#15171b}
     const fq = e.target.closest('[data-f]'); if (fq && draft) { faqDialog(draft.faqs.find((x) => x.id === Number(fq.dataset.f))); return; }
     if (e.target.closest('#a-publish')) { publish(); return; }
     if (e.target.closest('#a-discard')) { draft = clone(S); dirty = false; renderAdmin(); return; }
+    if (e.target.closest('#a-logout')) {
+      if (dirty && !e.target.closest('#a-logout').dataset.sure) { const b = e.target.closest('#a-logout'); b.dataset.sure = '1'; b.textContent = 'Hay cambios sin publicar. Tocá otra vez para salir'; return; }
+      setToken(''); disableServerEditor(); draft = null; dirty = false; location.hash = 'inicio'; toast('Cerraste sesión.'); return;
+    }
   });
   document.addEventListener('keydown', (e) => {
     if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('[data-edit],[data-f]')) { e.preventDefault(); e.target.click(); }
@@ -1281,8 +1349,21 @@ body{background:#fff;color:#15171b}
   shell(); route();
   // Capacidades del visor: llegan después del primer pintado. La tienda funciona sin ellas.
   (async () => {
+    if (!API) return;
+    // Dominio propio: si este celular ya inició sesión, se muestra "Editar tienda".
+    if (getToken()) {
+      try { await api('/me'); enableServerEditor(); if (location.hash === '#editar') route(); }
+      catch (e) { if (e.status === 401) setToken(''); }
+    }
+    // Por si la página quedó guardada en caché: se trae el catálogo más reciente.
     try {
-      if (!window.claude || !window.claude.use) return;
+      const fresh = await api('/store');
+      if (fresh && fresh.products && fresh.updatedAt && fresh.updatedAt !== S.updatedAt && !draft) { S = fresh; shell(); route(); }
+    } catch { /* se usa el catálogo que vino en la página */ }
+  })();
+  (async () => {
+    try {
+      if (API || !window.claude || !window.claude.use) return;
       const [user, artifact, assets] = await Promise.all([window.claude.use('user'), window.claude.use('artifact'), window.claude.use('assets')]);
       caps = { artifact, assets };
       isEditor = !!(user && user.canEdit && user.canEdit() && artifact);

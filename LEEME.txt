@@ -1,13 +1,17 @@
-Venta.iPhone.Buceo - tienda lista para subir
+Venta.iPhone.Buceo - tienda con panel de edicion (Cloudflare Workers)
 
-Archivos:
-  index.html  la tienda completa (catalogo, carrito, pedidos por WhatsApp)
-  logo.png    icono de la pestana y vista previa al compartir el link
+Archivos (todos van en la raiz del repositorio "tienda" de GitHub):
+  index.html       la tienda
+  logo.png         icono y vista previa al compartir
+  wrangler.jsonc   configuracion de Cloudflare (aca va el ID del KV)
+  .assetsignore    lista de archivos que NO se publican en la web
+  src/worker.js    el servidor: guarda productos, fotos y la contrasena
 
-Para publicarla en un hosting de paginas estaticas (Cloudflare Pages, Netlify, GitHub Pages):
-  1. Subi estos archivos a la raiz del repositorio o de la carpeta de publicacion.
-  2. No hace falta compilar ni instalar nada.
-  3. En el hosting, el directorio de publicacion es la raiz ("/" o vacio).
+Para editar la tienda: entra a https://ventaiphonebuceo.com/admin y pone tu contrasena.
 
-Nota: el boton "Editar tienda" solo funciona dentro de Claude. En tu dominio, los cambios se hacen
-editando index.html (o pidiendole a Claude que genere la version nueva).
+Configuracion en Cloudflare (una sola vez):
+  1. Storage & Databases > Workers KV > Create: nombre "tienda-datos". Copia el ID.
+  2. (Listo) El ID del KV tienda-datos ya esta en wrangler.jsonc.
+  3. Workers & Pages > tienda > Settings > Variables and Secrets > Add:
+     Type: Secret, Name: ADMIN_PASSWORD, Value: tu contrasena.
+  4. Workers & Pages > tienda > Settings > Build > Deploy command: npx wrangler deploy
