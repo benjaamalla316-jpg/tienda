@@ -12,3 +12,4 @@ package.json
 package-lock.json
 LEEME.txt
 README.md
+worker.js
